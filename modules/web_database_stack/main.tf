@@ -1,4 +1,23 @@
 
+resource "random_password" "db_master_pass" {
+  length           = 16
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "aws_secretsmanager_secret" "db_secret" {
+  name                    = "${var.environment}-postgres-credentials"
+  recovery_window_in_days = 0 
+}
+
+resource "aws_secretsmanager_secret_version" "db_secret_version" {
+  secret_id     = aws_secretsmanager_secret.db_secret.id
+  secret_string = jsonencode({
+    username = "dbadmin"
+    password = random_password.db_master_pass.result
+  })
+}
+
 resource "aws_ecr_repository" "app_repo" {
   name                 = "${var.environment}-flask-app"
   image_tag_mutability = "MUTABLE"
@@ -24,7 +43,8 @@ resource "aws_db_instance" "postgres" {
   instance_class         = "db.t3.micro" 
   allocated_storage      = 20
   username               = "dbadmin"
-  password               = var.db_password
+  
+  password               = random_password.db_master_pass.result 
   
   db_subnet_group_name   = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]

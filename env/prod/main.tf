@@ -3,5 +3,4 @@ module "prod_stack" {
   
   environment    = var.environment
   instance_type  = var.instance_type
-  db_password    = var.db_password 
 }
