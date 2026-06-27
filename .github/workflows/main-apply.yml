@@ -38,7 +38,9 @@ jobs:
         working-directory: ./env/dev
         run: |
           ECR_URL=$(terraform output -raw ecr_repository_url)
+          INSTANCE_ID=$(terraform output -raw dev_ec2_instance_id)
           echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
+          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         id: login-ecr
