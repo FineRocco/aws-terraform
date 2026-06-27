@@ -13,10 +13,11 @@ DB_NAME = os.environ.get("DB_NAME")
 def get_secret_from_rds():
     try:
         conn = psycopg2.connect(
-            host=DB_HOST,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS
+            host=os.environ.get('DB_HOST'),
+            database=os.environ.get('DB_NAME'),
+            user=os.environ.get('DB_USER'),
+            password=os.environ.get('DB_PASS'),
+            sslmode='require'
         )
         cursor = conn.cursor()
         
