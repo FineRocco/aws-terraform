@@ -213,5 +213,53 @@ Before GitHub Actions can deploy your infrastructure, it needs a legal identity 
 2. **Create the State Storage (Backend):**
     Manually create (via AWS CLI or Console) an S3 bucket to hold the Terraform state and a DynamoDB table (with partition key LockID) to handle state locking.
 
-### Phase 2: Pipeline Configuration
+### Phase 2: Pipeline Alignment
+Because OIDC relies on AWS-side trust policies rather than hidden keys, no GitHub Secrets are needed. You simply need to align your configuration files:
 
+1. **GitHub Actions YAML:** Open .github/workflows/main-apply.yml and .github/workflows/pr-plan.yml. Update the role-to-assume parameter with the IAM Role ARN generated in Phase 1.
+
+2. Backend Configuration: Update env/dev/backend.tf and env/prod/backend.tf to point to the exact S3 bucket and DynamoDB table you created in Phase 1.
+
+### Phase 3: Verify the Application:
+
+Once CodeDeploy finishes, extract the public IP of your EC2 instance from the Terraform outputs or the AWS Console. Visit it in your browser (http://<EC2_PUBLIC_IP>) to see your zero-knowledge database secret retrieved live!
+
+---
+
+## Teardown Protocol
+
+1. Purge the S3 CodeDeploy Artifacts:
+   
+  ```bash
+  aws s3 rm s3://<YOUR_CODEDEPLOY_BUCKET_NAME> --recursive
+  ```
+
+2. Purge the ECR Image Registry:
+
+  ```bash
+  aws ecr batch-delete-image --repository-name dev-flask-app --image-ids imageTag=latest --region eu-west-1
+  ```
+
+3. Destroy the Infrastructure:
+
+  ```bash
+  cd env/dev
+  terraform init
+  terraform destroy -auto-approve
+  ```
+
+4. Delete the Terraform State S3 Bucket:
+
+  ```bash
+  aws s3 rm s3://<YOUR_TF_STATE_BUCKET_NAME> --recursive
+  aws s3api delete-bucket --bucket <YOUR_TF_STATE_BUCKET_NAME> --region eu-west-1
+  ```
+
+5. Delete the DynamoDB Lock Table:
+
+  ```bash
+  aws dynamodb delete-table --table-name terraform-state-lock --region eu-west-1
+  ```
+
+6. Delete the OIDC Identity Provider and IAM Role via the AWS Console.
+  
