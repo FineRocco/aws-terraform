@@ -82,6 +82,14 @@ resource "aws_instance" "web" {
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ec2-user
+
+              dnf install -y ruby wget
+              cd /home/ec2-user
+              wget https://aws-codedeploy-eu-west-1.s3.eu-west-1.amazonaws.com/latest/install
+              chmod +x ./install
+              ./install auto
+              systemctl start codedeploy-agent
+              systemctl enable codedeploy-agent
               EOF
 
   tags = {

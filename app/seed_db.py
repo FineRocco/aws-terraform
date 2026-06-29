@@ -1,6 +1,12 @@
 import psycopg2
 import os
+import secrets
+import string
 
+alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+random_password = ''.join(secrets.choice(alphabet) for i in range(16))
+
+# 2. Connect to AWS RDS
 conn = psycopg2.connect(
     host=os.environ.get('DB_HOST'),
     database=os.environ.get('DB_NAME'),
@@ -10,7 +16,7 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-# Create the table
+# 3. Create the table
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS my_secrets (
     id SERIAL PRIMARY KEY,
@@ -18,10 +24,12 @@ CREATE TABLE IF NOT EXISTS my_secrets (
 );
 """)
 
-# Insert the winning secret
-cursor.execute("INSERT INTO my_secrets (secret_value) VALUES ('Zero-Knowledge DevSecOps Achieved!');")
+cursor.execute("TRUNCATE TABLE my_secrets RESTART IDENTITY;")
+
+cursor.execute("INSERT INTO my_secrets (secret_value) VALUES (%s);", (random_password,))
 
 conn.commit()
 cursor.close()
 conn.close()
-print("Database seeded successfully!")
+
+print("Database seeded successfully with a new secure random password!")

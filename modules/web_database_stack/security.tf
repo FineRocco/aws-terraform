@@ -92,3 +92,47 @@ resource "aws_iam_role_policy_attachment" "secrets_manager_read" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
+
+resource "aws_iam_role_policy" "ec2_s3_access" {
+  name   = "${var.environment}-ec2-s3-access"
+  role   = aws_iam_role.ec2_role.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:Get*",
+          "s3:List*"
+        ]
+        Resource = [
+          aws_s3_bucket.codedeploy_bucket.arn,
+          "${aws_s3_bucket.codedeploy_bucket.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role" "codedeploy_service_role" {
+  name = "${var.environment}-codedeploy-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "codedeploy.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy_service_role_policy" {
+  role       = aws_iam_role.codedeploy_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
+}

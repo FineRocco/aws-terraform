@@ -1,4 +1,4 @@
-name: "Terraform Apply (Main)"
+name: "Terraform Apply & CodeDeploy (Main)"
 on:
   push:
     branches:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  terraform-apply:
+  terraform-apply-and-deploy:
     runs-on: ubuntu-latest
     
     steps:
@@ -33,19 +33,15 @@ jobs:
         working-directory: ./env/dev
         run: terraform apply -auto-approve -no-color
 
-      - name: Extract ECR URL from Terraform Outputs
-        id: get-ecr-url
+      - name: Extract Target Variables from Terraform
+        id: get-tf-outputs
         working-directory: ./env/dev
         run: |
           ECR_URL=$(terraform output -raw ecr_repository_url)
-          INSTANCE_ID=$(terraform output -raw dev_ec2_instance_id)
-
-          DB_ENDPOINT_RAW=$(terraform output -raw dev_db_endpoint)
-          DB_HOST=$(echo $DB_ENDPOINT_RAW | cut -d':' -f1)  
-
+          ARTIFACT_BUCKET=$(terraform output -raw codedeploy_s3_bucket)
+          
           echo "ECR_URL=$ECR_URL" >> $GITHUB_ENV
-          echo "INSTANCE_ID=$INSTANCE_ID" >> $GITHUB_ENV
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "ARTIFACT_BUCKET=$ARTIFACT_BUCKET" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -54,35 +50,35 @@ jobs:
       - name: Build, Tag, and Push Docker Image
         working-directory: ./app
         run: |
-          # Build the image using the dynamically fetched URL
           docker build -t ${{ env.ECR_URL }}:latest .
-          
-          # Push the image to AWS ECR
           docker push ${{ env.ECR_URL }}:latest
 
-      - name: Deploy Container to EC2 via AWS SSM
+      - name: Package CodeDeploy Artifact
         run: |
-          echo "Sending deployment command to EC2 Instance: ${{ env.INSTANCE_ID }}"
+          mkdir -p deployment_artifact~
+
+          echo "ECR_URL=${{ env.ECR_URL }}" >> deployment_artifact/.env
+          echo "DB_HOST=${{ env.DB_HOST }}" >> deployment_artifact/.env
           
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ env.INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Pull and run Docker image with auto-seed" \
-            --parameters 'commands=[
-              "aws ecr get-login-password --region eu-west-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_URL }}",
-              "sudo docker stop flask-app || true",
-              "sudo docker rm flask-app || true",
-              "sudo docker pull ${{ env.ECR_URL }}:latest",
-              "RAW_SECRET=$(aws secretsmanager get-secret-value --secret-id dev-postgres-credentials --query SecretString --output text --region eu-west-1)",
-              "PARSED_PASS=$(echo $RAW_SECRET | jq -r .password)",
-              "sudo docker run -d --name flask-app -p 80:80 -e DB_HOST=${{ env.DB_HOST }} -e DB_USER=dbadmin -e DB_NAME=postgres -e DB_PASS=\"$PARSED_PASS\" ${{ env.ECR_URL }}:latest",
-              "sleep 15",
-              "sudo docker exec flask-app python /app/seed_db.py"
-            ]' \
-            --output text --query "Command.CommandId")
+          cp appspec.yml deployment_artifact/
+          cp -r scripts/ deployment_artifact/
+          cd deployment_artifact
+          zip -r ../deploy-${{ github.sha }}.zip .
+
+      - name: Upload Artifact to S3
+        run: |
+          aws s3 cp deploy-${{ github.sha }}.zip s3://${{ env.ARTIFACT_BUCKET }}/deploy-${{ github.sha }}.zip
+
+      - name: Trigger AWS CodeDeploy
+        run: |
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name dev-flask-app-deploy \
+            --deployment-group-name dev-deployment-group \
+            --s3-location bucket=${{ env.ARTIFACT_BUCKET }},key=deploy-${{ github.sha }}.zip,bundleType=zip \
+            --query "deploymentId" --output text)
+            
+          echo "CodeDeploy triggered with ID: $DEPLOYMENT_ID"
           
-          echo "Command dispatched. Waiting for execution to complete..."
+          aws deploy wait deployment-successful --deployment-id $DEPLOYMENT_ID
           
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "${{ env.INSTANCE_ID }}"
-          
-          echo "Deployment successful!"
+          echo "CodeDeploy deployment successfully rolled out to EC2!"
