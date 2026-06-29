@@ -61,6 +61,8 @@ This architecture relies on a "Pull-based" deployment lifecycle. Rather than pus
              │                                                       │
              └─────────────────► [ AWS CodeDeploy ] (Triggers EC2 Agent)
 
+```
+
 ### Network Topology & Routing
 
 This architecture employs a strict two-tier Virtual Private Cloud (VPC) design, separating publicly accessible compute resources from highly sensitive backend data stores.
