@@ -86,3 +86,11 @@ NACLs act as the outermost perimeter fence. In this architecture, they operate i
 Security groups act as stateful, micro-segmented firewalls attached directly to the network interfaces of the resources. 
 * **`web_sg` (The Front Door):** Attached to the EC2 instance. Explicitly allows Inbound `TCP 80` (HTTP) from `0.0.0.0/0`. **Strictly denies Port 22 (SSH)** to completely eliminate brute-force vector attacks.
 * **`db_sg` (The Vault Door):** Attached to the RDS instance. Employs a zero-trust ingress rule that allows `TCP 5432` (PostgreSQL) *only* if the traffic originates from the `web_sg` security group. It rejects all other internal VPC traffic by default.
+
+## Terraform State Management & Concurrency Control
+
+In a production-grade CI/CD environment, infrastructure state cannot reside locally or ephemerally on a GitHub runner. It must be centralized, encrypted, and strictly protected against concurrent execution. 
+
+### The Remote Backend Bootstrap
+* **AWS S3 (State Storage):** The `terraform.tfstate` file is stored in a heavily restricted, versioned, and encrypted S3 bucket. This acts as the absolute single source of truth for the environment's configuration.
+* **Amazon DynamoDB (State Locking):** To prevent race conditions—where two developers push to `main` simultaneously and trigger parallel GitHub Actions runners—a DynamoDB table is utilized for state locking. When a pipeline initiates `terraform plan` or `apply`, it requests a lock in DynamoDB. Any concurrent pipeline runs will be rejected until the lock is released, completely eliminating the risk of state corruption.
