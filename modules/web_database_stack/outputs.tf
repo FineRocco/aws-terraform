@@ -17,8 +17,3 @@ output "ec2_instance_id" {
   description = "The ID of the EC2 instance"
   value       = aws_instance.web.id
 }
-
-output "codedeploy_s3_bucket" {
-  description = "The S3 bucket used for CodeDeploy artifacts"
-  value       = aws_s3_bucket.codedeploy_bucket.id
-}
