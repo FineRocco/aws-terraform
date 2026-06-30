@@ -92,25 +92,3 @@ resource "aws_iam_role_policy_attachment" "secrets_manager_read" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
-
-resource "aws_iam_role_policy" "ec2_s3_access" {
-  name   = "${var.environment}-ec2-s3-access"
-  role   = aws_iam_role.ec2_role.id
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:Get*",
-          "s3:List*"
-        ]
-        Resource = [
-          aws_s3_bucket.codedeploy_bucket.arn,
-          "${aws_s3_bucket.codedeploy_bucket.arn}/*"
-        ]
-      }
-    ]
-  })
-}
